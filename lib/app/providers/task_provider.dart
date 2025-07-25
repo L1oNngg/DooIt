@@ -60,7 +60,7 @@ class TaskProvider with ChangeNotifier {
 
   Future<void> deleteTaskById(String taskId) async {
     try {
-      await _deleteTaskUseCase(taskId);
+      await _deleteTaskUseCase(taskId as Task);
       await _cancelTaskNotification(taskId);
       await _loadTasks();
     } catch (e) {
@@ -100,6 +100,7 @@ class TaskProvider with ChangeNotifier {
         print('Không thể lên lịch thông báo: dueDate, dueTime hoặc reminderTime là null');
         return;
       }
+
       final dueDateTime = tz.TZDateTime(
         tz.local,
         task.dueDate!.year,
@@ -108,12 +109,16 @@ class TaskProvider with ChangeNotifier {
         task.dueTime!.hour,
         task.dueTime!.minute,
       );
+
       final reminderDateTime = dueDateTime.subtract(task.reminderTime!);
+
       if (reminderDateTime.isBefore(DateTime.now())) {
         print('Không thể lên lịch thông báo: reminderDateTime ($reminderDateTime) đã qua');
         return;
       }
-      final result = await _notificationsPlugin.zonedSchedule(
+
+      // Chỉ await, không gán cho result
+      await _notificationsPlugin.zonedSchedule(
         task.id.hashCode,
         'Nhắc nhở: ${task.title}',
         'Đã đến thời gian nhắc nhở task: ${task.description ?? 'Không có mô tả'}',
@@ -127,17 +132,16 @@ class TaskProvider with ChangeNotifier {
           ),
         ),
         androidAllowWhileIdle: true,
-        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        uiLocalNotificationDateInterpretation:
+        UILocalNotificationDateInterpretation.absoluteTime,
       );
-      if (result == null) {
-        print('Lỗi: Không thể lên lịch thông báo cho task: ${task.id}');
-      } else {
-        print('Đã lên lịch thông báo cho task: ${task.id} tại $reminderDateTime');
-      }
+
+      print('Đã lên lịch thông báo cho task: ${task.id} tại $reminderDateTime');
     } catch (e) {
       print('Lỗi khi lên lịch thông báo: $e');
     }
   }
+
 
   Future<void> _cancelTaskNotification(String taskId) async {
     try {
