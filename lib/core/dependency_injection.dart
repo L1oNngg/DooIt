@@ -47,7 +47,6 @@ void setupDependencies() {
       getIt(),
       getIt(),
       getIt(),
-      FlutterLocalNotificationsPlugin(),
     ),
   );
 }
