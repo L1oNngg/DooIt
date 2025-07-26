@@ -23,17 +23,15 @@ class TaskProvider extends ChangeNotifier {
       this._deleteTaskUseCase,
       );
 
-  // Lấy toàn bộ tasks
   Future<void> fetchTasks() async {
     _tasks = await _getAllTasksUseCase();
     notifyListeners();
   }
 
-  // Thêm task
   Future<void> addTask(Task task) async {
     await _createTaskUseCase(task);
 
-    // Notification: nếu có dueDate + reminderTime
+    // Lên lịch notification nếu có dueDate và reminderTime
     if (task.dueDate != null && task.reminderTime != null) {
       final scheduledDateTime = task.dueDate!.subtract(task.reminderTime!);
       await NotificationService().scheduleTaskNotification(
@@ -47,11 +45,10 @@ class TaskProvider extends ChangeNotifier {
     await fetchTasks();
   }
 
-  // Cập nhật task
   Future<void> updateTask(Task task) async {
     await _updateTaskUseCase(task);
 
-    // Hủy notification cũ
+    // Hủy notification cũ và lên lịch lại
     await NotificationService().cancelNotification(task.hashCode);
 
     if (task.dueDate != null && task.reminderTime != null) {
@@ -67,7 +64,6 @@ class TaskProvider extends ChangeNotifier {
     await fetchTasks();
   }
 
-  // Xóa task theo id
   Future<void> deleteTaskById(String taskId) async {
     final task = _tasks.firstWhere((t) => t.id == taskId);
     await NotificationService().cancelNotification(task.hashCode);
@@ -75,15 +71,51 @@ class TaskProvider extends ChangeNotifier {
     await fetchTasks();
   }
 
-  // Hoàn thành task
   Future<void> completeTask(Task task) async {
-    final updated = task.copyWith(isCompleted: true);
-    await _updateTaskUseCase(updated);
+    // 1. Đánh dấu task hiện tại hoàn thành
+    final updatedTask = task.copyWith(isCompleted: true);
+    await _updateTaskUseCase(updatedTask);
+
+    // 2. Hủy notification của task cũ
     await NotificationService().cancelNotification(task.hashCode);
+
+    // 3. Nếu có recurrence thì tạo task mới với dueDate mới
+    if (task.recurrence != 'none' && task.dueDate != null) {
+      DateTime newDueDate;
+      switch (task.recurrence) {
+        case 'daily':
+          newDueDate = task.dueDate!.add(const Duration(days: 1));
+          break;
+        case 'weekly':
+          newDueDate = task.dueDate!.add(const Duration(days: 7));
+          break;
+        case 'monthly':
+          newDueDate = DateTime(
+            task.dueDate!.year,
+            task.dueDate!.month + 1,
+            task.dueDate!.day,
+            task.dueDate!.hour,
+            task.dueDate!.minute,
+          );
+          break;
+        default:
+          newDueDate = task.dueDate!;
+      }
+
+      final newTask = task.copyWith(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        isCompleted: false,
+        dueDate: newDueDate,
+      );
+
+      // addTask sẽ lo phần notification
+      await addTask(newTask);
+    }
+
+    // 4. Refresh danh sách
     await fetchTasks();
   }
 
-  // Lọc tasks theo keyword (đơn giản)
   List<Task> filterTasks(String keyword) {
     return _tasks
         .where((t) => t.title.toLowerCase().contains(keyword.toLowerCase()))
