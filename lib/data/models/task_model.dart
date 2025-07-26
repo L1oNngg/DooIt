@@ -1,60 +1,61 @@
-import 'package:flutter/material.dart';
-
 class TaskModel {
   final String id;
   final String title;
   final String description;
-  final DateTime dueDate;
-  final TimeOfDay? dueTime; // Thêm thời gian
+  final DateTime? dueDate;
+  final DateTime? dueTime;
   final bool isCompleted;
   final String boardId;
-  final String? priority;
-  final String? recurrence;
-  final Duration? reminderTime; // Thêm thời gian nhắc nhở
+  final int priority;
+  final Duration? reminderTime;
+  final String recurrence; // NEW
 
   TaskModel({
     required this.id,
     required this.title,
-    this.description = '',
+    required this.description,
     required this.dueDate,
-    this.dueTime,
-    this.isCompleted = false,
+    required this.dueTime,
+    required this.isCompleted,
     required this.boardId,
-    this.priority,
-    this.recurrence,
-    this.reminderTime,
+    required this.priority,
+    required this.reminderTime,
+    this.recurrence = 'none',
   });
 
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'title': title,
-    'description': description,
-    'dueDate': dueDate.toIso8601String(),
-    'dueTime': dueTime != null ? '${dueTime?.hour.toString().padLeft(2, '0')}:${dueTime?.minute.toString().padLeft(2, '0')}' : null, // Lưu dưới dạng HH:MM
-    'isCompleted': isCompleted,
-    'boardId': boardId,
-    'priority': priority,
-    'recurrence': recurrence,
-    'reminderTime': reminderTime?.inMinutes, // Lưu dưới dạng phút
-  };
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'dueDate': dueDate?.millisecondsSinceEpoch,
+      'dueTime': dueTime?.millisecondsSinceEpoch,
+      'isCompleted': isCompleted,
+      'boardId': boardId,
+      'priority': priority,
+      'reminderTime': reminderTime?.inMinutes,
+      'recurrence': recurrence,
+    };
+  }
 
-  factory TaskModel.fromJson(Map<String, dynamic> json) {
+  factory TaskModel.fromMap(Map<String, dynamic> map) {
     return TaskModel(
-      id: json['id'],
-      title: json['title'],
-      description: json['description'],
-      dueDate: DateTime.parse(json['dueDate']),
-      dueTime: json['dueTime'] != null
-          ? TimeOfDay(
-        hour: int.parse(json['dueTime'].toString().split(':')[0]),
-        minute: int.parse(json['dueTime'].toString().split(':')[1]),
-      )
+      id: map['id'] ?? '',
+      title: map['title'] ?? '',
+      description: map['description'] ?? '',
+      dueDate: map['dueDate'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(map['dueDate'])
           : null,
-      isCompleted: json['isCompleted'],
-      boardId: json['boardId'],
-      priority: json['priority'],
-      recurrence: json['recurrence'],
-      reminderTime: json['reminderTime'] != null ? Duration(minutes: json['reminderTime']) : null,
+      dueTime: map['dueTime'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(map['dueTime'])
+          : null,
+      isCompleted: map['isCompleted'] ?? false,
+      boardId: map['boardId'] ?? '',
+      priority: map['priority'] ?? 0,
+      reminderTime: map['reminderTime'] != null
+          ? Duration(minutes: map['reminderTime'])
+          : null,
+      recurrence: map['recurrence'] ?? 'none',
     );
   }
 }

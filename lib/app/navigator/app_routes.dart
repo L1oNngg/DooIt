@@ -1,21 +1,28 @@
 import 'package:flutter/material.dart';
 import '../screens/task_list_screen.dart';
 import '../screens/board_screen.dart';
-import '../screens/goal_screen.dart';
 import '../screens/calendar_screen.dart';
+import '../screens/task_detail_screen.dart';
 
 class AppRoutes {
-  static const String initial = '/';
-  static const String taskList = '/task';
+  static const String taskList = '/';
   static const String board = '/board';
-  static const String goal = '/goal';
   static const String calendar = '/calendar';
+  static const String taskDetail = '/task-detail';
 
-  static final routes = <String, WidgetBuilder>{
-    initial: (context) => TaskListScreen(),
-    taskList: (context) => TaskListScreen(),
-    board: (context) => BoardScreen(),
-    goal: (context) => GoalScreen(),
-    calendar: (context) => CalendarScreen(),
-  };
+  static Map<String, WidgetBuilder> get routes {
+    return {
+      taskList: (context) => const TaskListScreen(),
+      board: (context) {
+        final args = ModalRoute.of(context)!.settings.arguments
+        as Map<String, dynamic>;
+        return BoardScreen(
+          boardId: args['boardId'] as String,
+          boardName: args['boardName'] as String,
+        );
+      },
+      calendar: (context) => const CalendarScreen(),
+      taskDetail: (context) => const TaskDetailScreen(),
+    };
+  }
 }

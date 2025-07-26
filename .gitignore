@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Giữ LF cho code
+*.dart text eol=lf
+*.yaml text eol=lf
+*.lock text eol=lf

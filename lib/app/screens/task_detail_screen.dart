@@ -1,49 +1,58 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+
 import '../../domain/entities/task.dart';
-import '../../app/providers/task_provider.dart';
+import '../providers/task_provider.dart';
 
 class TaskDetailScreen extends StatefulWidget {
-  final Task? task;
-  final bool isEditing;
+  final Task? existingTask;
 
-  TaskDetailScreen({this.task, this.isEditing = false});
+  const TaskDetailScreen({super.key, this.existingTask});
 
   @override
-  _TaskDetailScreenState createState() => _TaskDetailScreenState();
+  State<TaskDetailScreen> createState() => _TaskDetailScreenState();
 }
 
 class _TaskDetailScreenState extends State<TaskDetailScreen> {
   final _formKey = GlobalKey<FormState>();
-  late String _title;
-  late String? _description;
-  late DateTime _dueDate;
-  late TimeOfDay _dueTime;
-  late String _boardId;
-  late String? _priority;
-  late String? _recurrence;
-  late Duration _reminderTime;
+
+  late TextEditingController _titleController;
+  late TextEditingController _descriptionController;
+
+  DateTime? _dueDate;
+  TimeOfDay? _dueTime;
+  Duration? _reminderTime;
+  String _boardId = '';
+  int _priority = 1;
+  String _recurrence = 'none';
 
   @override
   void initState() {
     super.initState();
-    _title = widget.task?.title ?? '';
-    _description = widget.task?.description;
-    _dueDate = widget.task?.dueDate ?? DateTime.now();
-    _dueTime = widget.task?.dueTime ?? TimeOfDay.now();
-    _boardId = widget.task?.boardId ?? '';
-    _priority = widget.task?.priority;
-    _recurrence = widget.task?.recurrence;
-    _reminderTime = widget.task?.reminderTime ?? Duration(minutes: 0);
+    final task = widget.existingTask;
+
+    _titleController = TextEditingController(text: task?.title ?? '');
+    _descriptionController =
+        TextEditingController(text: task?.description ?? '');
+    _dueDate = task?.dueDate;
+    _dueTime = task?.dueDate != null
+        ? TimeOfDay.fromDateTime(task!.dueDate!)
+        : null;
+    _reminderTime = task?.reminderTime;
+    _boardId = task?.boardId ?? '';
+    _priority = task?.priority ?? 1;
+    _recurrence = task?.recurrence ?? 'none';
   }
 
   @override
   Widget build(BuildContext context) {
-    final taskProvider = Provider.of<TaskProvider>(context, listen: false);
+    final isEdit = widget.existingTask != null;
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.isEditing ? 'Chỉnh sửa Task' : 'Thêm Task')),
+      appBar: AppBar(
+        title: Text(isEdit ? 'Chỉnh sửa nhiệm vụ' : 'Thêm nhiệm vụ'),
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
@@ -51,142 +60,148 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           child: ListView(
             children: [
               TextFormField(
-                initialValue: _title,
-                decoration: InputDecoration(labelText: 'Tiêu đề'),
-                validator: (value) => value!.isEmpty ? 'Vui lòng nhập tiêu đề' : null,
-                onChanged: (value) => _title = value,
+                controller: _titleController,
+                decoration: const InputDecoration(labelText: 'Tiêu đề'),
+                validator: (value) =>
+                value == null || value.isEmpty ? 'Nhập tiêu đề' : null,
               ),
+              const SizedBox(height: 8),
               TextFormField(
-                initialValue: _description,
-                decoration: InputDecoration(labelText: 'Mô tả'),
-                onChanged: (value) => _description = value.isEmpty ? null : value,
+                controller: _descriptionController,
+                decoration: const InputDecoration(labelText: 'Mô tả'),
+                maxLines: 3,
               ),
+              const SizedBox(height: 16),
               ListTile(
-                title: Text('Ngày hết hạn: ${_dueDate.toString().split(' ')[0]}'),
-                trailing: Icon(Icons.calendar_today),
+                title: Text(
+                  _dueDate == null
+                      ? 'Chọn ngày đến hạn'
+                      : DateFormat('dd/MM/yyyy').format(_dueDate!),
+                ),
+                trailing: const Icon(Icons.calendar_today),
                 onTap: () async {
                   final picked = await showDatePicker(
                     context: context,
-                    initialDate: _dueDate,
+                    initialDate: _dueDate ?? DateTime.now(),
                     firstDate: DateTime.now(),
                     lastDate: DateTime(2100),
                   );
-                  if (picked != null) setState(() => _dueDate = picked);
-                },
-              ),
-              ListTile(
-                title: Text('Thời gian: ${_dueTime.format(context)}'),
-                trailing: Icon(Icons.access_time),
-                onTap: () async {
-                  final picked = await showTimePicker(context: context, initialTime: _dueTime);
-                  if (picked != null) setState(() => _dueTime = picked);
-                },
-              ),
-              StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('boards').snapshots(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
-                  final boards = snapshot.data!.docs;
-                  return DropdownButtonFormField<String>(
-                    value: _boardId.isNotEmpty ? _boardId : null,
-                    decoration: InputDecoration(labelText: 'Board'),
-                    items: boards.map((doc) {
-                      final boardName = doc['name'] ?? 'Unnamed';
-                      return DropdownMenuItem(
-                        value: doc.id,
-                        child: Text(boardName),
-                      );
-                    }).toList(),
-                    onChanged: (value) => setState(() => _boardId = value ?? ''),
-                    validator: (value) => value == null || value.isEmpty ? 'Vui lòng chọn board' : null,
-                  );
-                },
-              ),
-              DropdownButtonFormField<String>(
-                value: _priority,
-                decoration: InputDecoration(labelText: 'Ưu tiên'),
-                items: ['Low', 'Medium', 'High'].map((priority) {
-                  return DropdownMenuItem(value: priority, child: Text(priority));
-                }).toList(),
-                onChanged: (value) => setState(() => _priority = value),
-              ),
-              DropdownButtonFormField<String>(
-                value: _recurrence,
-                decoration: InputDecoration(labelText: 'Lặp lại'),
-                items: ['None', 'Daily', 'Weekly', 'Monthly'].map((recurrence) {
-                  return DropdownMenuItem(value: recurrence, child: Text(recurrence));
-                }).toList(),
-                onChanged: (value) => setState(() => _recurrence = value),
-              ),
-              ListTile(
-                title: Text('Nhắc nhở trước: ${_reminderTime.inMinutes} phút'),
-                trailing: Icon(Icons.alarm),
-                onTap: () async {
-                  final minutes = await showDialog<int>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: Text('Chọn thời gian nhắc nhở'),
-                      content: DropdownButton<int>(
-                        value: _reminderTime.inMinutes,
-                        items: [0, 15, 30, 60, 120].map((min) {
-                          return DropdownMenuItem(value: min, child: Text('$min phút'));
-                        }).toList(),
-                        onChanged: (value) => Navigator.pop(context, value),
-                      ),
-                      actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text('Hủy'))],
-                    ),
-                  );
-                  if (minutes != null) setState(() => _reminderTime = Duration(minutes: minutes));
-                },
-              ),
-              SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () async {
-                  if (_formKey.currentState!.validate()) {
-                    if (widget.isEditing && widget.task != null) {
-                      await taskProvider.updateTask(
-                        widget.task!.id,
-                        title: _title,
-                        description: _description,
-                        isCompleted: widget.task!.isCompleted,
-                        boardId: _boardId,
-                        dueDate: _dueDate,
-                        dueTime: _dueTime,
-                        priority: _priority,
-                        recurrence: _recurrence,
-                        reminderTime: _reminderTime,
-                      );
-                    } else {
-                      final newTask = Task(
-                        id: UniqueKey().toString(),
-                        title: _title,
-                        description: _description,
-                        dueDate: _dueDate,
-                        dueTime: _dueTime,
-                        isCompleted: false,
-                        boardId: _boardId,
-                        priority: _priority,
-                        recurrence: _recurrence,
-                        reminderTime: _reminderTime.inMinutes > 0 ? _reminderTime : null,
-                      );
-                      await taskProvider.addTask(newTask);
-                    }
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(widget.isEditing ? 'Đã cập nhật nhiệm vụ!' : 'Đã thêm nhiệm vụ!')),
-                    );
-
-                    Future.delayed(Duration(milliseconds: 500), () {
-                      Navigator.pop(context);
+                  if (picked != null) {
+                    setState(() {
+                      _dueDate = picked;
                     });
                   }
                 },
-                child: Text(widget.isEditing ? 'Lưu' : 'Thêm'),
+              ),
+              ListTile(
+                title: Text(
+                  _dueTime == null
+                      ? 'Chọn giờ'
+                      : _dueTime!.format(context),
+                ),
+                trailing: const Icon(Icons.access_time),
+                onTap: () async {
+                  final picked = await showTimePicker(
+                    context: context,
+                    initialTime: _dueTime ?? TimeOfDay.now(),
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      _dueTime = picked;
+                    });
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<int>(
+                value: _priority,
+                decoration: const InputDecoration(labelText: 'Độ ưu tiên'),
+                items: const [
+                  DropdownMenuItem(value: 1, child: Text('Thấp')),
+                  DropdownMenuItem(value: 2, child: Text('Trung bình')),
+                  DropdownMenuItem(value: 3, child: Text('Cao')),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _priority = value ?? 1;
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _recurrence,
+                decoration: const InputDecoration(labelText: 'Lặp lại'),
+                items: const [
+                  DropdownMenuItem(value: 'none', child: Text('Không lặp')),
+                  DropdownMenuItem(value: 'daily', child: Text('Hàng ngày')),
+                  DropdownMenuItem(value: 'weekly', child: Text('Hàng tuần')),
+                  DropdownMenuItem(value: 'monthly', child: Text('Hàng tháng')),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _recurrence = value ?? 'none';
+                  });
+                },
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton(
+                onPressed: _saveTask,
+                child: Text(isEdit ? 'Cập nhật' : 'Thêm'),
               ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  void _saveTask() {
+    if (!_formKey.currentState!.validate()) return;
+
+    // Kết hợp ngày và giờ thành một DateTime (nếu có chọn)
+    DateTime? combinedDateTime;
+    if (_dueDate != null) {
+      combinedDateTime = DateTime(
+        _dueDate!.year,
+        _dueDate!.month,
+        _dueDate!.day,
+        _dueTime?.hour ?? 0,
+        _dueTime?.minute ?? 0,
+      );
+    }
+
+    final taskProvider = Provider.of<TaskProvider>(context, listen: false);
+
+    if (widget.existingTask == null) {
+      // Thêm mới
+      final newTask = Task(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        title: _titleController.text.trim(),
+        description: _descriptionController.text.trim(),
+        dueDate: combinedDateTime,
+        dueTime: null,
+        isCompleted: false,
+        boardId: _boardId,
+        priority: _priority,
+        reminderTime: _reminderTime ?? const Duration(hours: 1),
+        recurrence: _recurrence,
+      );
+      taskProvider.addTask(newTask);
+    } else {
+      // Cập nhật
+      final updatedTask = widget.existingTask!.copyWith(
+        title: _titleController.text.trim(),
+        description: _descriptionController.text.trim(),
+        dueDate: combinedDateTime,
+        dueTime: null,
+        boardId: _boardId,
+        priority: _priority,
+        reminderTime: _reminderTime,
+        recurrence: _recurrence,
+      );
+      taskProvider.updateTask(updatedTask);
+    }
+
+    Navigator.pop(context);
   }
 }
