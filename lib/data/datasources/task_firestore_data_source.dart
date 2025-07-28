@@ -1,35 +1,68 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../domain/entities/task.dart';
-import '../mappers/task_mapper.dart';
-import '../models/task_model.dart';
 
 class TaskFirestoreDataSource {
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore firestore;
+  TaskFirestoreDataSource(this.firestore);
 
-  TaskFirestoreDataSource(this._firestore);
+  CollectionReference get _tasks => firestore.collection('tasks');
 
-  CollectionReference get _taskCollection =>
-      _firestore.collection('tasks');
+  // ================== CREATE ==================
+  Future<void> createTask(Task task) async {
+    await _tasks.doc(task.id).set({
+      'id': task.id,
+      'title': task.title,
+      'description': task.description,
+      'dueDate': task.dueDate.millisecondsSinceEpoch,
+      'dueTime': task.dueTime,
+      'priority': task.priority,
+      'isCompleted': task.isCompleted,
+      'recurrence': task.recurrence,
+      'boardId': task.boardId,
+      'reminderTime': task.reminderTime?.inMilliseconds,
+    });
+  }
 
+  // ================== READ ==================
   Future<List<Task>> getAllTasks() async {
-    final snapshot = await _taskCollection.get();
+    final snapshot = await _tasks.get();
+
     return snapshot.docs.map((doc) {
       final data = doc.data() as Map<String, dynamic>;
-      return TaskMapper.toEntity(TaskModel.fromMap(data));
+      return Task(
+        id: data['id'] ?? '',
+        title: data['title'] ?? '',
+        description: data['description'] ?? '',
+        dueDate: DateTime.fromMillisecondsSinceEpoch(data['dueDate']),
+        dueTime: data['dueTime'],
+        priority: data['priority'] ?? 0,
+        isCompleted: data['isCompleted'] ?? false,
+        recurrence: data['recurrence'] ?? 'none',
+        boardId: data['boardId'] ?? '',
+        reminderTime: data['reminderTime'] != null
+            ? Duration(milliseconds: data['reminderTime'])
+            : null,
+      );
     }).toList();
   }
 
-  Future<void> createTask(Task task) async {
-    final model = TaskMapper.toModel(task);
-    await _taskCollection.doc(task.id).set(model.toMap());
-  }
-
+  // ================== UPDATE ==================
   Future<void> updateTask(Task task) async {
-    final model = TaskMapper.toModel(task);
-    await _taskCollection.doc(task.id).update(model.toMap());
+    await _tasks.doc(task.id).update({
+      'title': task.title,
+      'description': task.description,
+      'dueDate': task.dueDate.millisecondsSinceEpoch,
+      'dueTime': task.dueTime,
+      'priority': task.priority,
+      'isCompleted': task.isCompleted,
+      'recurrence': task.recurrence,
+      'boardId': task.boardId,
+      'reminderTime': task.reminderTime?.inMilliseconds,
+    });
   }
 
+  // ================== DELETE ==================
   Future<void> deleteTask(Task task) async {
-    await _taskCollection.doc(task.id).delete();
+    await _tasks.doc(task.id).delete();
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../providers/task_provider.dart';
+import '../widgets/app_bottom_nav.dart';
 
 class GoalScreen extends StatelessWidget {
   @override
@@ -56,6 +57,7 @@ class GoalScreen extends StatelessWidget {
           );
         },
       ),
+      bottomNavigationBar: const AppBottomNav(currentIndex: 2),
       floatingActionButton: FloatingActionButton(onPressed: () => _showAddGoalDialog(context), child: Icon(Icons.add)),
     );
   }

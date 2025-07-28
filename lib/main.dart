@@ -34,6 +34,8 @@ Future<void> main() async {
 
   // Khởi tạo NotificationService (bao gồm timezone)
   await NotificationService().init();
+  NotificationService().debugShowTestNotification();
+
 
   runApp(
     MultiProvider(

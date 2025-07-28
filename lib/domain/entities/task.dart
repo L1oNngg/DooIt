@@ -2,26 +2,24 @@ class Task {
   final String id;
   final String title;
   final String description;
-  final DateTime? dueDate;
+  final DateTime dueDate;
   final DateTime? dueTime;
   final bool isCompleted;
   final String boardId;
   final int priority;
   final Duration? reminderTime;
-
-  /// NEW: recurrence field
-  final String recurrence; // "none", "daily", "weekly", "monthly"
+  final String recurrence;
 
   Task({
     required this.id,
     required this.title,
     required this.description,
     required this.dueDate,
-    required this.dueTime,
+    this.dueTime,
     required this.isCompleted,
     required this.boardId,
     required this.priority,
-    required this.reminderTime,
+    this.reminderTime,
     this.recurrence = 'none',
   });
 

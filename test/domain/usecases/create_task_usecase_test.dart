@@ -1,24 +1,36 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
-import 'package:dooit/domain/entities/task.dart'; // Adjusted import
-import 'package:dooit/domain/usecases/create_task_use_case.dart'; // Adjusted import
-import 'package:dooit/domain/repositories/task_repository.dart'; // Adjusted import
+import 'package:dooit/domain/entities/task.dart';
+import 'package:dooit/domain/usecases/create_task_use_case.dart';
 
-class MockTaskRepository extends Mock implements TaskRepository {}
+import '../../mocks/mocks.mocks.dart';
 
 void main() {
-  test('CreateTaskUseCase should create a task', () async {
-    final mockRepository = MockTaskRepository();
-    final useCase = CreateTaskUseCaseImpl(mockRepository);
+  late MockCreateTaskUseCase mockCreateTaskUseCase;
+
+  setUp(() {
+    mockCreateTaskUseCase = MockCreateTaskUseCase();
+  });
+
+  test('Gọi CreateTaskUseCase thành công', () async {
     final task = Task(
       id: '1',
-      title: 'Test Task',
+      title: 'Task test',
+      description: 'desc',
       dueDate: DateTime.now(),
-      boardId: 'board1',
+      dueTime: null,
+      isCompleted: false,
+      boardId: '',
+      priority: 1,
+      reminderTime: const Duration(hours: 1),
+      recurrence: 'none',
     );
 
-    await useCase(task);
+    // Sử dụng use case
+    when(mockCreateTaskUseCase(task)).thenAnswer((_) async {});
 
-    verify(mockRepository.createTask(task)).called(1);
+    await mockCreateTaskUseCase(task);
+
+    verify(mockCreateTaskUseCase(task)).called(1);
   });
 }

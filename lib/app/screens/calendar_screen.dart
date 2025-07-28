@@ -20,18 +20,35 @@ class _CalendarScreenState extends State<CalendarScreen> {
   void initState() {
     super.initState();
     Future.microtask(() =>
-        Provider.of<TaskProvider>(context, listen: false).fetchTasks());
+        Provider.of<TaskProvider>(context, listen: false).fetchAllTasks());
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<TaskProvider>(context);
-    final tasks = provider.tasks
-        .where((task) =>
-    task.dueDate != null &&
-        DateFormat('yyyy-MM-dd').format(task.dueDate!) ==
-            DateFormat('yyyy-MM-dd').format(_selectedDate))
-        .toList();
+    final tasks = provider.tasks.where((task) {
+      // if (task.dueDate == null) return false;
+
+      final taskDate = DateFormat('yyyy-MM-dd').format(task.dueDate);
+      final selectedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
+
+      switch (task.recurrence) {
+        case 'daily':
+          return _selectedDate.isAfter(task.dueDate) || taskDate == selectedDate;
+
+        case 'weekly':
+          final diff = _selectedDate.difference(task.dueDate).inDays;
+          return diff >= 0 && diff % 7 == 0;
+
+        case 'monthly':
+          return _selectedDate.day == task.dueDate.day &&
+              _selectedDate.isAfter(task.dueDate);
+
+        default: // none
+          return taskDate == selectedDate;
+      }
+    }).toList();
+
 
     return Scaffold(
       appBar: AppBar(
@@ -119,7 +136,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         onPressed: () => _addNewTask(context),
         child: const Icon(Icons.add),
       ),
-      bottomNavigationBar: const AppBottomNav(currentIndex: 2),
+      bottomNavigationBar: const AppBottomNav(currentIndex: 1),
     );
   }
 

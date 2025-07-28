@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
-
+import '../../app/providers/task_provider.dart';
 import '../../domain/entities/task.dart';
 import '../widgets/app_bottom_nav.dart';
-import '../providers/task_provider.dart';
+import 'task_detail_screen.dart'; // thêm import màn hình chi tiết
 
 class TaskListScreen extends StatefulWidget {
   const TaskListScreen({super.key});
@@ -14,95 +13,142 @@ class TaskListScreen extends StatefulWidget {
 }
 
 class _TaskListScreenState extends State<TaskListScreen> {
+  final TextEditingController _searchController = TextEditingController();
   String _searchKeyword = '';
-
-  final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _descriptionController = TextEditingController();
-
-  DateTime? _dueDate;
-  TimeOfDay? _dueTime;
-  Duration? _reminderTime;
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(() =>
-        Provider.of<TaskProvider>(context, listen: false).fetchTasks());
+    // Lấy danh sách tasks khi vào màn hình
+    Future.microtask(() {
+      Provider.of<TaskProvider>(context, listen: false).fetchAllTasks();
+    });
+  }
+
+  void _quickAddTask(BuildContext context) {
+    final provider = Provider.of<TaskProvider>(context, listen: false);
+    final newTask = Task(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: 'Task nhanh ${DateTime.now().hour}:${DateTime.now().minute}',
+      description: 'Tạo nhanh từ FAB',
+      dueDate: DateTime.now().add(const Duration(hours: 1)),
+      dueTime: null,
+      isCompleted: false,
+      boardId: '',
+      priority: 1,
+      reminderTime: const Duration(minutes: 30),
+      recurrence: 'none',
+    );
+    provider.addTask(newTask);
   }
 
   @override
   Widget build(BuildContext context) {
-    final taskProvider = Provider.of<TaskProvider>(context);
-    final tasks = _searchKeyword.isEmpty
-        ? taskProvider.tasks
-        : taskProvider.filterTasks(_searchKeyword);
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Danh sách nhiệm vụ'),
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: TextField(
-              decoration: const InputDecoration(
-                hintText: 'Tìm kiếm nhiệm vụ...',
-                prefixIcon: Icon(Icons.search),
-              ),
-              onChanged: (value) {
-                setState(() {
-                  _searchKeyword = value;
-                });
-              },
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: tasks.length,
-              itemBuilder: (context, index) {
-                final task = tasks[index];
-                return ListTile(
-                  title: Text(
-                    task.title,
-                    style: TextStyle(
-                      decoration: task.isCompleted
-                          ? TextDecoration.lineThrough
-                          : TextDecoration.none,
-                    ),
-                  ),
-                  subtitle: Text(task.description),
-                  leading: Checkbox(
-                    value: task.isCompleted,
-                    onChanged: (value) {
-                      Provider.of<TaskProvider>(context, listen: false)
-                          .updateTask(task.copyWith(
-                        isCompleted: value ?? false,
-                      ));
-                    },
-                  ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete),
-                    onPressed: () {
-                      Provider.of<TaskProvider>(context, listen: false)
-                          .deleteTaskById(task.id);
-                    },
-                  ),
-                );
-              },
-            ),
+        title: const Text('Danh sách công việc'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              Provider.of<TaskProvider>(context, listen: false).fetchAllTasks();
+            },
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.pushNamed(context, '/task-detail');
+      body: Consumer<TaskProvider>(
+        builder: (context, taskProvider, child) {
+          final tasks = _searchKeyword.isEmpty
+              ? taskProvider.tasks
+              : taskProvider.filterTasks(_searchKeyword);
+
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: const InputDecoration(
+                    labelText: 'Tìm kiếm công việc',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      _searchKeyword = value;
+                    });
+                  },
+                ),
+              ),
+              Expanded(
+                child: tasks.isEmpty
+                    ? const Center(child: Text('Không có công việc nào'))
+                    : ListView.builder(
+                  itemCount: tasks.length,
+                  itemBuilder: (context, index) {
+                    final Task task = tasks[index];
+                    final remaining = taskProvider.timeRemaining(task);
+                    final urgent = taskProvider.isUrgent(task);
+
+                    return Card(
+                      color: urgent ? Colors.red[100] : null,
+                      child: ListTile(
+                        title: Text(task.title),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Còn lại: ${_formatRemaining(remaining)}'),
+                            if (urgent)
+                              const Text(
+                                'Sắp đến hạn!',
+                                style: TextStyle(
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                          ],
+                        ),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete),
+                          onPressed: () async {
+                            await taskProvider.deleteTask(task);
+                          },
+                        ),
+                        // thêm điều hướng sang TaskDetailScreen
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => TaskDetailScreen(
+                                existingTask: task,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          );
         },
+      ),
+      // Thêm nút tạo Task nhanh
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _quickAddTask(context),
         child: const Icon(Icons.add),
       ),
-
-      // Thanh điều hướng tạm
+      // Thêm BottomNavigationBar
       bottomNavigationBar: const AppBottomNav(currentIndex: 0),
     );
+  }
+
+  String _formatRemaining(Duration? remaining) {
+    if (remaining == null) return "Không có hạn";
+    if (remaining.isNegative) return "Đã quá hạn";
+    final hours = remaining.inHours;
+    final minutes = remaining.inMinutes % 60;
+    final seconds = remaining.inSeconds % 60;
+    return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 }

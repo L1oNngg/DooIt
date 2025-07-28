@@ -20,7 +20,7 @@ class _BoardScreenState extends State<BoardScreen> {
   void initState() {
     super.initState();
     Future.microtask(() =>
-        Provider.of<TaskProvider>(context, listen: false).fetchTasks());
+        Provider.of<TaskProvider>(context, listen: false).fetchAllTasks());
   }
 
   @override
@@ -76,7 +76,7 @@ class _BoardScreenState extends State<BoardScreen> {
         onPressed: () => _addNewTask(context),
         child: const Icon(Icons.add),
       ),
-      bottomNavigationBar: const AppBottomNav(currentIndex: 1),
+      bottomNavigationBar: const AppBottomNav(currentIndex: 3),
     );
   }
 

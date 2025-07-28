@@ -1,124 +1,97 @@
 import 'package:flutter/material.dart';
-
-import '../../core/services/notification_service.dart';
 import '../../domain/entities/task.dart';
-import '../../domain/usecases/get_all_tasks_use_case.dart';
 import '../../domain/usecases/create_task_use_case.dart';
-import '../../domain/usecases/update_task_use_case.dart';
 import '../../domain/usecases/delete_task_use_case.dart';
+import '../../domain/usecases/update_task_use_case.dart';
+import '../../domain/usecases/get_all_tasks_use_case.dart';
 
-class TaskProvider extends ChangeNotifier {
-  final GetAllTasksUseCase _getAllTasksUseCase;
+class TaskProvider with ChangeNotifier {
   final CreateTaskUseCase _createTaskUseCase;
-  final UpdateTaskUseCase _updateTaskUseCase;
   final DeleteTaskUseCase _deleteTaskUseCase;
+  final UpdateTaskUseCase _updateTaskUseCase;
+  final GetAllTasksUseCase _getAllTasksUseCase;
 
+  // Danh sách toàn bộ task
   List<Task> _tasks = [];
-  List<Task> get tasks => _tasks;
+  // Danh sách sau khi lọc (để hiển thị)
+  List<Task> _filteredTasks = [];
 
   TaskProvider(
-      this._getAllTasksUseCase,
       this._createTaskUseCase,
-      this._updateTaskUseCase,
       this._deleteTaskUseCase,
+      this._updateTaskUseCase,
+      this._getAllTasksUseCase,
       );
 
-  Future<void> fetchTasks() async {
+  List<Task> get tasks => _tasks;
+  List<Task> get filteredTasks => _filteredTasks;
+
+  /// Hàm tính thời gian còn lại trước khi hết hạn
+  Duration? timeRemaining(Task task) {
+    final now = DateTime.now();
+    if (task.dueDate.isBefore(now)) {
+      return Duration.zero;
+    }
+    return task.dueDate.difference(now);
+  }
+
+  bool isUrgent(Task task) {
+    final remaining = timeRemaining(task);
+    if (remaining == null) return false;
+    return remaining.inMinutes <= 5 && remaining.inSeconds > 0;
+  }
+
+  Future<void> loadTasks() async {
     _tasks = await _getAllTasksUseCase();
     notifyListeners();
   }
 
   Future<void> addTask(Task task) async {
     await _createTaskUseCase(task);
-
-    // Lên lịch notification nếu có dueDate và reminderTime
-    if (task.dueDate != null && task.reminderTime != null) {
-      final scheduledDateTime = task.dueDate!.subtract(task.reminderTime!);
-      await NotificationService().scheduleTaskNotification(
-        id: task.hashCode,
-        title: 'Nhắc nhở công việc',
-        body: task.title,
-        scheduledDateTime: scheduledDateTime,
-      );
-    }
-
-    await fetchTasks();
+    _tasks.add(task);
+    notifyListeners();
   }
 
   Future<void> updateTask(Task task) async {
     await _updateTaskUseCase(task);
-
-    // Hủy notification cũ và lên lịch lại
-    await NotificationService().cancelNotification(task.hashCode);
-
-    if (task.dueDate != null && task.reminderTime != null) {
-      final scheduledDateTime = task.dueDate!.subtract(task.reminderTime!);
-      await NotificationService().scheduleTaskNotification(
-        id: task.hashCode,
-        title: 'Nhắc nhở công việc',
-        body: task.title,
-        scheduledDateTime: scheduledDateTime,
-      );
+    final index = _tasks.indexWhere((t) => t.id == task.id);
+    if (index != -1) {
+      _tasks[index] = task;
+      notifyListeners();
     }
-
-    await fetchTasks();
   }
 
-  Future<void> deleteTaskById(String taskId) async {
-    final task = _tasks.firstWhere((t) => t.id == taskId);
-    await NotificationService().cancelNotification(task.hashCode);
+  Future<void> deleteTask(Task task) async {
     await _deleteTaskUseCase(task);
-    await fetchTasks();
+    _tasks.removeWhere((t) => t.id == task.id);
+    notifyListeners();
   }
 
-  Future<void> completeTask(Task task) async {
-    // 1. Đánh dấu task hiện tại hoàn thành
-    final updatedTask = task.copyWith(isCompleted: true);
-    await _updateTaskUseCase(updatedTask);
-
-    // 2. Hủy notification của task cũ
-    await NotificationService().cancelNotification(task.hashCode);
-
-    // 3. Nếu có recurrence thì tạo task mới với dueDate mới
-    if (task.recurrence != 'none' && task.dueDate != null) {
-      DateTime newDueDate;
-      switch (task.recurrence) {
-        case 'daily':
-          newDueDate = task.dueDate!.add(const Duration(days: 1));
-          break;
-        case 'weekly':
-          newDueDate = task.dueDate!.add(const Duration(days: 7));
-          break;
-        case 'monthly':
-          newDueDate = DateTime(
-            task.dueDate!.year,
-            task.dueDate!.month + 1,
-            task.dueDate!.day,
-            task.dueDate!.hour,
-            task.dueDate!.minute,
-          );
-          break;
-        default:
-          newDueDate = task.dueDate!;
-      }
-
-      final newTask = task.copyWith(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        isCompleted: false,
-        dueDate: newDueDate,
-      );
-
-      // addTask sẽ lo phần notification
-      await addTask(newTask);
-    }
-
-    // 4. Refresh danh sách
-    await fetchTasks();
+  // Lấy tất cả tasks từ usecase
+  Future<void> fetchAllTasks() async {
+    final all = await _getAllTasksUseCase();
+    _tasks = all;
+    _filteredTasks = List.from(_tasks);
+    notifyListeners();
   }
 
+  // Lọc tasks theo từ khóa (search)
   List<Task> filterTasks(String keyword) {
-    return _tasks
-        .where((t) => t.title.toLowerCase().contains(keyword.toLowerCase()))
+    _filteredTasks = _tasks
+        .where((task) =>
+    task.title.toLowerCase().contains(keyword.toLowerCase()) ||
+        task.description.toLowerCase().contains(keyword.toLowerCase()))
         .toList();
+    notifyListeners();
+    return _filteredTasks;
+  }
+
+  // Xóa task theo ID
+  Future<void> deleteTaskById(String id) async {
+    final task = _tasks.firstWhere((t) => t.id == id);
+    await _deleteTaskUseCase(task);
+    _tasks.removeWhere((t) => t.id == id);
+    _filteredTasks.removeWhere((t) => t.id == id);
+    notifyListeners();
   }
 }

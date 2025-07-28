@@ -1,43 +1,68 @@
 import 'package:flutter/material.dart';
+import '../screens/task_list_screen.dart';
+import '../screens/calendar_screen.dart';
+import '../screens/goal_screen.dart';
+import '../screens/board_screen.dart';
 
 class AppBottomNav extends StatelessWidget {
   final int currentIndex;
-
   const AppBottomNav({super.key, required this.currentIndex});
+
+  void _onTap(BuildContext context, int index) {
+    if (index == currentIndex) return;
+
+    Widget screen;
+    switch (index) {
+      case 0:
+        screen = const TaskListScreen();
+        break;
+      case 1:
+        screen = const CalendarScreen();
+        break;
+      case 2:
+        screen = GoalScreen();
+        break;
+      case 3:
+        screen = const BoardScreen(
+          boardId: 'default',
+          boardName: 'Tất cả Boards',
+        );
+        break;
+      default:
+        return;
+    }
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => screen),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return BottomNavigationBar(
+      backgroundColor: Colors.grey[900], // Nền tối
+      selectedItemColor: Colors.white,   // Màu icon/text khi chọn
+      unselectedItemColor: Colors.grey[400], // Màu icon/text chưa chọn
+      type: BottomNavigationBarType.fixed,
       currentIndex: currentIndex,
-      onTap: (index) {
-        if (index == currentIndex) return; // không làm gì nếu chọn tab hiện tại
-        if (index == 0) {
-          Navigator.pushReplacementNamed(context, '/');
-        } else if (index == 1) {
-          Navigator.pushReplacementNamed(
-            context,
-            '/board',
-            arguments: {
-              'boardId': 'sample-board',
-              'boardName': 'Công việc',
-            },
-          );
-        } else if (index == 2) {
-          Navigator.pushReplacementNamed(context, '/calendar');
-        }
-      },
+      onTap: (i) => _onTap(context, i),
       items: const [
         BottomNavigationBarItem(
           icon: Icon(Icons.list),
-          label: 'Nhiệm vụ',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.dashboard),
-          label: 'Board',
+          label: 'Tasks',
         ),
         BottomNavigationBarItem(
           icon: Icon(Icons.calendar_today),
-          label: 'Lịch',
+          label: 'Calendar',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.flag),
+          label: 'Goals',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.dashboard),
+          label: 'Boards',
         ),
       ],
     );

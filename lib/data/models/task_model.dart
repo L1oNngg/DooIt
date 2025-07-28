@@ -2,24 +2,24 @@ class TaskModel {
   final String id;
   final String title;
   final String description;
-  final DateTime? dueDate;
-  final DateTime? dueTime;
+  final int dueDate;
+  final int? dueTime;
   final bool isCompleted;
   final String boardId;
   final int priority;
-  final Duration? reminderTime;
-  final String recurrence; // NEW
+  final int? reminderTime; // lưu milliseconds
+  final String recurrence;
 
   TaskModel({
     required this.id,
     required this.title,
     required this.description,
     required this.dueDate,
-    required this.dueTime,
+    this.dueTime,
     required this.isCompleted,
     required this.boardId,
     required this.priority,
-    required this.reminderTime,
+    this.reminderTime,
     this.recurrence = 'none',
   });
 
@@ -28,12 +28,12 @@ class TaskModel {
       'id': id,
       'title': title,
       'description': description,
-      'dueDate': dueDate?.millisecondsSinceEpoch,
-      'dueTime': dueTime?.millisecondsSinceEpoch,
+      'dueDate': dueDate,
+      'dueTime': dueTime,
       'isCompleted': isCompleted,
       'boardId': boardId,
       'priority': priority,
-      'reminderTime': reminderTime?.inMinutes,
+      'reminderTime': reminderTime,
       'recurrence': recurrence,
     };
   }
@@ -43,18 +43,12 @@ class TaskModel {
       id: map['id'] ?? '',
       title: map['title'] ?? '',
       description: map['description'] ?? '',
-      dueDate: map['dueDate'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(map['dueDate'])
-          : null,
-      dueTime: map['dueTime'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(map['dueTime'])
-          : null,
+      dueDate: map['dueDate'] ?? DateTime.now().millisecondsSinceEpoch,
+      dueTime: map['dueTime'],
       isCompleted: map['isCompleted'] ?? false,
       boardId: map['boardId'] ?? '',
       priority: map['priority'] ?? 0,
-      reminderTime: map['reminderTime'] != null
-          ? Duration(minutes: map['reminderTime'])
-          : null,
+      reminderTime: map['reminderTime'],
       recurrence: map['recurrence'] ?? 'none',
     );
   }

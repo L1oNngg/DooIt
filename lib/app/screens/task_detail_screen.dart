@@ -82,7 +82,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 onTap: () async {
                   final picked = await showDatePicker(
                     context: context,
-                    initialDate: _dueDate ?? DateTime.now(),
+                    initialDate: widget.existingTask?.dueDate ?? DateTime.now(),
                     firstDate: DateTime.now(),
                     lastDate: DateTime(2100),
                   );
@@ -178,7 +178,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         title: _titleController.text.trim(),
         description: _descriptionController.text.trim(),
-        dueDate: combinedDateTime,
+        dueDate: combinedDateTime ?? DateTime.now(),
         dueTime: null,
         isCompleted: false,
         boardId: _boardId,
