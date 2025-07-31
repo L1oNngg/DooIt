@@ -1,3 +1,4 @@
+import 'package:dooit/app/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
 import '../screens/task_list_screen.dart';
 import '../screens/calendar_screen.dart';
@@ -27,6 +28,8 @@ class AppBottomNav extends StatelessWidget {
           boardId: 'default',
           boardName: 'Tất cả Boards',
         );
+      case 4:
+        screen = SettingsScreen();
         break;
       default:
         return;
@@ -64,6 +67,10 @@ class AppBottomNav extends StatelessWidget {
           icon: Icon(Icons.dashboard),
           label: 'Boards',
         ),
+        BottomNavigationBarItem(
+          icon: const Icon(Icons.settings),
+          label: 'Settings',
+        )
       ],
     );
   }

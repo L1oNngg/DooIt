@@ -1,40 +1,89 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
-import '../widgets/app_bottom_nav.dart';
-import '../../domain/entities/task.dart';
 import '../providers/task_provider.dart';
+import '../providers/board_provider.dart';
+import '../widgets/app_bottom_nav.dart';
 
 class BoardScreen extends StatefulWidget {
-  final String boardId;
-  final String boardName;
+  final String? boardId;
+  final String? boardName;
 
-  const BoardScreen({super.key, required this.boardId, required this.boardName});
+  const BoardScreen({super.key, this.boardId, this.boardName});
 
   @override
   State<BoardScreen> createState() => _BoardScreenState();
 }
 
 class _BoardScreenState extends State<BoardScreen> {
+  String? _selectedBoardId;
+
   @override
   void initState() {
     super.initState();
-    Future.microtask(() =>
-        Provider.of<TaskProvider>(context, listen: false).fetchAllTasks());
+    // Nếu có tham số truyền vào, set sẵn
+    _selectedBoardId = widget.boardId;
   }
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<TaskProvider>(context);
+    final taskProvider = Provider.of<TaskProvider>(context);
+    final boardProvider = Provider.of<BoardProvider>(context);
 
-    // Lọc task theo boardId
-    final tasks = provider.tasks
-        .where((task) => task.boardId == widget.boardId)
-        .toList();
+    final boards = boardProvider.boards;
+
+    final tasks = taskProvider.tasks.where((task) {
+      if (_selectedBoardId == null) return true;
+      return task.boardId == _selectedBoardId;
+    }).toList();
+
+    // Lấy tên board
+    final selectedBoardName = _selectedBoardId == null
+        ? "Tất cả Boards"
+        : (boards.isNotEmpty
+        ? boards.firstWhere(
+          (b) => b.id == _selectedBoardId,
+      orElse: () => boards.first,
+    ).name
+        : (widget.boardName ?? "Board"));
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Bảng: ${widget.boardName}'),
+        title: GestureDetector(
+          onTap: () {
+            showModalBottomSheet(
+              context: context,
+              builder: (context) {
+                return ListView(
+                  children: [
+                    ListTile(
+                      title: const Text('Tất cả Boards'),
+                      onTap: () {
+                        setState(() {
+                          _selectedBoardId = null;
+                        });
+                        Navigator.pop(context);
+                      },
+                    ),
+                    ...boards.map(
+                          (b) => ListTile(
+                        title: Text(b.name),
+                        onTap: () {
+                          setState(() {
+                            _selectedBoardId = b.id;
+                          });
+                          Navigator.pop(context);
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+          child: Text(
+            'Bảng: ${widget.boardName ?? selectedBoardName}',
+          ),
+        ),
       ),
       body: tasks.isEmpty
           ? const Center(child: Text('Không có nhiệm vụ nào trong bảng này'))
@@ -42,60 +91,16 @@ class _BoardScreenState extends State<BoardScreen> {
         itemCount: tasks.length,
         itemBuilder: (context, index) {
           final task = tasks[index];
-
-          return ListTile(
-            title: Text(
-              task.title,
-              style: TextStyle(
-                decoration: task.isCompleted
-                    ? TextDecoration.lineThrough
-                    : TextDecoration.none,
-              ),
-            ),
-            subtitle: Text(task.description),
-            leading: Checkbox(
-              value: task.isCompleted,
-              onChanged: (value) {
-                Provider.of<TaskProvider>(context, listen: false)
-                    .updateTask(task.copyWith(
-                  isCompleted: value ?? false,
-                ));
-              },
-            ),
-            trailing: IconButton(
-              icon: const Icon(Icons.delete),
-              onPressed: () {
-                Provider.of<TaskProvider>(context, listen: false)
-                    .deleteTaskById(task.id);
-              },
+          return Card(
+            margin: const EdgeInsets.all(8),
+            child: ListTile(
+              title: Text(task.title),
+              subtitle: Text(task.description),
             ),
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _addNewTask(context),
-        child: const Icon(Icons.add),
-      ),
       bottomNavigationBar: const AppBottomNav(currentIndex: 3),
     );
-  }
-
-  void _addNewTask(BuildContext context) {
-    final provider = Provider.of<TaskProvider>(context, listen: false);
-
-    final newTask = Task(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      title: 'Nhiệm vụ mới',
-      description: 'Tạo trong bảng ${widget.boardName}',
-      dueDate: DateTime.now().add(const Duration(days: 1)),
-      dueTime: null,
-      isCompleted: false,
-      boardId: widget.boardId,
-      priority: 1,
-      reminderTime: const Duration(hours: 1),
-      recurrence: 'none',
-    );
-
-    provider.addTask(newTask);
   }
 }

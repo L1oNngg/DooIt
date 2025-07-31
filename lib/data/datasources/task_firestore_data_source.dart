@@ -65,4 +65,31 @@ class TaskFirestoreDataSource {
   Future<void> deleteTask(Task task) async {
     await _tasks.doc(task.id).delete();
   }
+
+  /// Kiểm tra xem đã có task trùng title và dueDate chưa
+  Future<bool> existsTaskWithTitleAndDate(String title, DateTime dueDate) async {
+    final snapshot = await firestore
+        .collection('tasks')
+        .where('title', isEqualTo: title)
+        .where('dueDate', isEqualTo: Timestamp.fromDate(dueDate))
+        .limit(1)
+        .get();
+    return snapshot.docs.isNotEmpty;
+  }
+
+  Future<String> createTaskReturnId(Task task) async {
+    final doc = await firestore.collection('tasks').add({
+      'boardId': task.boardId,
+      'title': task.title,
+      'description': task.description,
+      'dueDate': task.dueDate.millisecondsSinceEpoch,
+      'dueTime': task.dueTime,
+      'isCompleted': task.isCompleted,
+      'priority': task.priority,
+      'recurrence': task.recurrence,
+      'reminderTime': task.reminderTime != null ? task.reminderTime!.inMilliseconds : null,
+    });
+    return doc.id;
+  }
+
 }

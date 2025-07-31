@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../widgets/app_bottom_nav.dart';
 import '../../domain/entities/task.dart';
 import '../providers/task_provider.dart';
+import '../../data/datasources/task_completion_data_source.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -15,40 +17,62 @@ class CalendarScreen extends StatefulWidget {
 
 class _CalendarScreenState extends State<CalendarScreen> {
   DateTime _selectedDate = DateTime.now();
+  Map<String, bool> _completions = {}; // lưu trạng thái completion theo ngày
+
+  late final TaskCompletionDataSource _completionDataSource;
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(() =>
-        Provider.of<TaskProvider>(context, listen: false).fetchAllTasks());
+    _completionDataSource =
+        TaskCompletionDataSource(FirebaseFirestore.instance);
+
+    Future.microtask(() async {
+      await Provider.of<TaskProvider>(context, listen: false).fetchAllTasks();
+      await _loadCompletions();
+    });
+  }
+
+  Future<void> _loadCompletions() async {
+    final dateKey = DateFormat('yyyy-MM-dd').format(_selectedDate);
+    final data =
+    await _completionDataSource.getCompletionsForDate(dateKey);
+    setState(() {
+      _completions = data;
+    });
+  }
+
+  bool _isTaskCompletedForSelectedDate(Task task) {
+    // Nếu task có recurrence thì lấy trạng thái từ completions
+    if (task.recurrence != 'none') {
+      return _completions[task.id] == true;
+    }
+    // Task bình thường thì lấy từ field gốc
+    return task.isCompleted;
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<TaskProvider>(context);
     final tasks = provider.tasks.where((task) {
-      // if (task.dueDate == null) return false;
-
       final taskDate = DateFormat('yyyy-MM-dd').format(task.dueDate);
       final selectedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
 
       switch (task.recurrence) {
         case 'daily':
           return _selectedDate.isAfter(task.dueDate) || taskDate == selectedDate;
-
         case 'weekly':
           final diff = _selectedDate.difference(task.dueDate).inDays;
           return diff >= 0 && diff % 7 == 0;
-
         case 'monthly':
           return _selectedDate.day == task.dueDate.day &&
               _selectedDate.isAfter(task.dueDate);
-
         default: // none
           return taskDate == selectedDate;
       }
     }).toList();
 
+    final dateKey = DateFormat('yyyy-MM-dd').format(_selectedDate);
 
     return Scaffold(
       appBar: AppBar(
@@ -67,10 +91,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 final isSelected = DateFormat('yyyy-MM-dd').format(date) ==
                     DateFormat('yyyy-MM-dd').format(_selectedDate);
                 return GestureDetector(
-                  onTap: () {
+                  onTap: () async {
                     setState(() {
                       _selectedDate = date;
                     });
+                    await _loadCompletions();
                   },
                   child: Container(
                     width: 60,
@@ -99,31 +124,41 @@ class _CalendarScreenState extends State<CalendarScreen> {
               itemCount: tasks.length,
               itemBuilder: (context, index) {
                 final task = tasks[index];
+                final isCompleted = _isTaskCompletedForSelectedDate(task);
+
                 return ListTile(
                   title: Text(
                     task.title,
                     style: TextStyle(
-                      decoration: task.isCompleted
+                      decoration: isCompleted
                           ? TextDecoration.lineThrough
                           : TextDecoration.none,
                     ),
                   ),
                   subtitle: Text(task.description),
                   leading: Checkbox(
-                    value: task.isCompleted,
-                    onChanged: (value) {
-                      // Dùng copyWith để update
-                      Provider.of<TaskProvider>(context, listen: false)
-                          .updateTask(task.copyWith(
-                        isCompleted: value ?? false,
-                      ));
+                    value: isCompleted,
+                    onChanged: (value) async {
+                      if (task.recurrence != 'none') {
+                        // recurrence: lưu completion theo ngày
+                        await _completionDataSource.setCompletion(
+                            task.id, dateKey, value ?? false);
+                        await _loadCompletions();
+                      } else {
+                        // non recurrence: update trực tiếp trong Firestore
+                        Provider.of<TaskProvider>(context,
+                            listen: false)
+                            .updateTask(task.copyWith(
+                          isCompleted: value ?? false,
+                        ));
+                      }
                     },
                   ),
                   trailing: IconButton(
                     icon: const Icon(Icons.delete),
-                    onPressed: () {
-                      Provider.of<TaskProvider>(context, listen: false)
-                          .deleteTaskById(task.id);
+                    onPressed: () async {
+                      await Provider.of<TaskProvider>(context, listen: false)
+                          .deleteTaskById(task.id!);
                     },
                   ),
                 );
@@ -156,6 +191,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
       recurrence: 'none',
     );
 
-    provider.addTask(newTask);
+    provider.addTask(newTask, context);
   }
 }

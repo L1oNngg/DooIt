@@ -1,92 +1,84 @@
+// core/services/notification_service.dart
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
+
+Future<void> requestNotificationPermission() async {
+  final status = await Permission.notification.status;
+  if (!status.isGranted) {
+    await Permission.notification.request();
+  }
+}
+
+
 class NotificationService {
-  static final FlutterLocalNotificationsPlugin _plugin =
+  static final NotificationService _instance = NotificationService._internal();
+  factory NotificationService() => _instance;
+  NotificationService._internal();
+
+  final FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin =
   FlutterLocalNotificationsPlugin();
 
   Future<void> init() async {
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const initSettings = InitializationSettings(android: androidSettings);
+    const AndroidInitializationSettings androidInit =
+    AndroidInitializationSettings('@mipmap/ic_launcher');
+    const InitializationSettings settings = InitializationSettings(
+      android: androidInit,
+    );
 
-    await _plugin.initialize(initSettings);
+    await _flutterLocalNotificationsPlugin.initialize(settings);
 
-    // Android 13+ (không có requestPermission trên Android)
-    // Trên Android, quyền POST_NOTIFICATIONS phải được cấp qua system dialog
-    // Bạn cần thêm: <uses-permission android:name="android.permission.POST_NOTIFICATIONS" /> trong AndroidManifest.xml
-    // iOS mới có requestPermission.
+    // setup timezone
+    tz.initializeTimeZones();
+    tz.setLocalLocation(tz.getLocation('Asia/Ho_Chi_Minh'));
   }
 
-  // Hiển thị thông báo ngay lập tức
-  Future<void> showInstantNotification({
+  Future<void> showNotification({
     required String title,
     required String body,
   }) async {
-    const androidDetails = AndroidNotificationDetails(
-      'instant_channel',
-      'Instant Notifications',
-      importance: Importance.max,
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'default_channel',
+      'General',
+      importance: Importance.high,
       priority: Priority.high,
     );
 
-    const notificationDetails = NotificationDetails(android: androidDetails);
+    const NotificationDetails details = NotificationDetails(android: androidDetails);
 
-    await _plugin.show(0, title, body, notificationDetails);
-  }
-
-  // Lên lịch thông báo
-  Future<void> scheduleTaskNotification({
-    required int id,
-    required String title,
-    required String body,
-    required DateTime scheduledDateTime,
-  }) async {
-    final now = DateTime.now();
-    if (scheduledDateTime.isBefore(now)) return;
-
-    final scheduledTZ = tz.TZDateTime.from(scheduledDateTime, tz.local);
-
-    const androidDetails = AndroidNotificationDetails(
-      'task_channel',
-      'Task Notifications',
-      importance: Importance.max,
-      priority: Priority.high,
-    );
-
-    const notificationDetails = NotificationDetails(android: androidDetails);
-
-    await _plugin.zonedSchedule(
-      id,
+    await _flutterLocalNotificationsPlugin.show(
+      0,
       title,
       body,
-      scheduledTZ,
-      notificationDetails,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      details,
+    );
+  }
+
+  Future<void> scheduleNotification({
+    required String title,
+    required String body,
+    required DateTime scheduledTime,
+  }) async {
+    final schedule = tz.TZDateTime.from(scheduledTime, tz.local);
+
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'scheduled_channel',
+      'Scheduled Notifications',
+      importance: Importance.max,
+      priority: Priority.high,
+    );
+
+    await _flutterLocalNotificationsPlugin.zonedSchedule(
+      scheduledTime.millisecondsSinceEpoch ~/ 1000,
+      title,
+      body,
+      schedule,
+      const NotificationDetails(android: androidDetails),
+      androidAllowWhileIdle: true,
       uiLocalNotificationDateInterpretation:
       UILocalNotificationDateInterpretation.absoluteTime,
     );
   }
-
-  Future<void> cancelNotification(int id) async {
-    await _plugin.cancel(id);
-  }
-
-  Future<void> debugShowTestNotification() async {
-    const androidDetails = AndroidNotificationDetails(
-      'test_channel',
-      'Test Notifications',
-      importance: Importance.max,
-      priority: Priority.high,
-    );
-
-    const notificationDetails = NotificationDetails(android: androidDetails);
-
-    await _plugin.show(
-      999,
-      'Test Notification',
-      'This is a debug test',
-      notificationDetails,
-    );
-  }
-
 }

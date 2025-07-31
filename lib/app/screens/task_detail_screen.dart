@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../domain/entities/task.dart';
 import '../providers/task_provider.dart';
+import '../providers/board_provider.dart';
 
 class TaskDetailScreen extends StatefulWidget {
   final Task? existingTask;
@@ -48,6 +49,21 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.existingTask != null;
+    final taskProvider = Provider.of<TaskProvider>(context);
+    final boardProvider = Provider.of<BoardProvider>(context);
+    final boards = boardProvider.boards;
+
+    // Nếu chưa có board chọn
+    String dropdownValue;
+    if (_boardId.isNotEmpty) {
+      dropdownValue = _boardId;
+    } else {
+      if (boards.isNotEmpty) {
+        dropdownValue = boards.first.id;
+      } else {
+        dropdownValue = 'default';
+      }
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -66,12 +82,14 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 value == null || value.isEmpty ? 'Nhập tiêu đề' : null,
               ),
               const SizedBox(height: 8),
+
               TextFormField(
                 controller: _descriptionController,
                 decoration: const InputDecoration(labelText: 'Mô tả'),
                 maxLines: 3,
               ),
               const SizedBox(height: 16),
+
               ListTile(
                 title: Text(
                   _dueDate == null
@@ -83,7 +101,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   final picked = await showDatePicker(
                     context: context,
                     initialDate: widget.existingTask?.dueDate ?? DateTime.now(),
-                    firstDate: DateTime.now(),
+                    firstDate: DateTime(2020),
                     lastDate: DateTime(2100),
                   );
                   if (picked != null) {
@@ -93,11 +111,10 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   }
                 },
               ),
+
               ListTile(
                 title: Text(
-                  _dueTime == null
-                      ? 'Chọn giờ'
-                      : _dueTime!.format(context),
+                  _dueTime == null ? 'Chọn giờ' : _dueTime!.format(context),
                 ),
                 trailing: const Icon(Icons.access_time),
                 onTap: () async {
@@ -113,6 +130,32 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 },
               ),
               const SizedBox(height: 16),
+
+              // Dropdown chọn Board
+              DropdownButtonFormField<String>(
+                value: dropdownValue,
+                decoration: const InputDecoration(labelText: 'Chọn Board'),
+                items: (boards.isNotEmpty
+                    ? boards
+                    .map((b) => DropdownMenuItem(
+                  value: b.id,
+                  child: Text(b.name),
+                ))
+                    .toList()
+                    : [
+                  const DropdownMenuItem(
+                    value: 'default',
+                    child: Text('Mặc định'),
+                  )
+                ]),
+                onChanged: (value) {
+                  setState(() {
+                    _boardId = value ?? '';
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+
               DropdownButtonFormField<int>(
                 value: _priority,
                 decoration: const InputDecoration(labelText: 'Độ ưu tiên'),
@@ -128,6 +171,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 },
               ),
               const SizedBox(height: 16),
+
               DropdownButtonFormField<String>(
                 value: _recurrence,
                 decoration: const InputDecoration(labelText: 'Lặp lại'),
@@ -144,6 +188,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 },
               ),
               const SizedBox(height: 32),
+
               ElevatedButton(
                 onPressed: _saveTask,
                 child: Text(isEdit ? 'Cập nhật' : 'Thêm'),
@@ -158,7 +203,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   void _saveTask() {
     if (!_formKey.currentState!.validate()) return;
 
-    // Kết hợp ngày và giờ thành một DateTime (nếu có chọn)
     DateTime? combinedDateTime;
     if (_dueDate != null) {
       combinedDateTime = DateTime(
@@ -171,9 +215,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     }
 
     final taskProvider = Provider.of<TaskProvider>(context, listen: false);
+    final selectedBoardId = _boardId.isNotEmpty ? _boardId : 'default';
 
     if (widget.existingTask == null) {
-      // Thêm mới
       final newTask = Task(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         title: _titleController.text.trim(),
@@ -181,20 +225,19 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         dueDate: combinedDateTime ?? DateTime.now(),
         dueTime: null,
         isCompleted: false,
-        boardId: _boardId,
+        boardId: selectedBoardId,
         priority: _priority,
         reminderTime: _reminderTime ?? const Duration(hours: 1),
         recurrence: _recurrence,
       );
-      taskProvider.addTask(newTask);
+      taskProvider.addTask(newTask, context);
     } else {
-      // Cập nhật
       final updatedTask = widget.existingTask!.copyWith(
         title: _titleController.text.trim(),
         description: _descriptionController.text.trim(),
         dueDate: combinedDateTime,
         dueTime: null,
-        boardId: _boardId,
+        boardId: selectedBoardId,
         priority: _priority,
         reminderTime: _reminderTime,
         recurrence: _recurrence,
