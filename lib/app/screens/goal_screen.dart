@@ -275,6 +275,7 @@ class _GoalScreenState extends State<GoalScreen> {
                       startDate.add(const Duration(days: 30));
 
                       await goalProvider.createGoal(
+                        context,
                         _goalNameController.text,
                         [],
                         isHabit: true,
@@ -285,6 +286,7 @@ class _GoalScreenState extends State<GoalScreen> {
                       );
                     } else {
                       await goalProvider.createGoal(
+                        context,
                         _goalNameController.text,
                         _selectedTaskIds,
                         isHabit: false,

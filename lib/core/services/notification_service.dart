@@ -4,14 +4,12 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
-
 Future<void> requestNotificationPermission() async {
   final status = await Permission.notification.status;
   if (!status.isGranted) {
     await Permission.notification.request();
   }
 }
-
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -30,33 +28,44 @@ class NotificationService {
 
     await _flutterLocalNotificationsPlugin.initialize(settings);
 
-    // setup timezone
+    // Request notification permission
+    await requestNotificationPermission();
+
+    // Init timezone
     tz.initializeTimeZones();
     tz.setLocalLocation(tz.getLocation('Asia/Ho_Chi_Minh'));
   }
 
+  /// Hiển thị thông báo ngay lập tức (dùng cho countdown mỗi phút)
   Future<void> showNotification({
+    required int id,
     required String title,
     required String body,
   }) async {
     const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'default_channel',
-      'General',
-      importance: Importance.high,
+      'countdown_channel',
+      'Countdown Notifications',
+      channelDescription: 'Thông báo nhắc nhở đếm ngược 10 phút cuối',
+      importance: Importance.max,
       priority: Priority.high,
+      playSound: true,
+      enableVibration: true,
     );
 
-    const NotificationDetails details = NotificationDetails(android: androidDetails);
+    const NotificationDetails details =
+    NotificationDetails(android: androidDetails);
 
     await _flutterLocalNotificationsPlugin.show(
-      0,
+      id,
       title,
       body,
       details,
     );
   }
 
+  /// Lên lịch notification vào một thời điểm cụ thể
   Future<void> scheduleNotification({
+    required int id,
     required String title,
     required String body,
     required DateTime scheduledTime,
@@ -66,12 +75,15 @@ class NotificationService {
     const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
       'scheduled_channel',
       'Scheduled Notifications',
+      channelDescription: 'Thông báo nhắc nhở trước thời hạn',
       importance: Importance.max,
       priority: Priority.high,
+      playSound: true,
+      enableVibration: true,
     );
 
     await _flutterLocalNotificationsPlugin.zonedSchedule(
-      scheduledTime.millisecondsSinceEpoch ~/ 1000,
+      id,
       title,
       body,
       schedule,
@@ -80,5 +92,10 @@ class NotificationService {
       uiLocalNotificationDateInterpretation:
       UILocalNotificationDateInterpretation.absoluteTime,
     );
+  }
+
+  /// Hủy một notification theo id
+  Future<void> cancelNotification(int id) async {
+    await _flutterLocalNotificationsPlugin.cancel(id);
   }
 }

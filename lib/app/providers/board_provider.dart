@@ -18,55 +18,73 @@ class BoardProvider with ChangeNotifier {
     fetchBoards();
   }
 
+  /// Load boards trực tiếp từ Firestore và cập nhật _defaultBoardId
   Future<void> loadBoards() async {
     final snapshot = await FirebaseFirestore.instance.collection('boards').get();
 
     if (snapshot.docs.isEmpty) {
-      // Tạo board mặc định
+      // Không có board nào -> tạo board mặc định
       final newBoardRef = FirebaseFirestore.instance.collection('boards').doc();
       await newBoardRef.set({
-        'name': 'Default',
-        'description': 'Default board',
+        'name': 'DailyLife',
+        'description': 'Default board for daily habits and tasks',
         'isDefault': true,
         'createdAt': FieldValue.serverTimestamp(),
       });
+
       _defaultBoardId = newBoardRef.id;
       _boards = [
         Board(
           id: _defaultBoardId!,
-          name: 'Default',
-          description: 'Default board',
+          name: 'Default Board',
+          description: 'Board mặc định tự động tạo',
           isDefault: true,
         ),
       ];
     } else {
       _boards = snapshot.docs.map((doc) {
+        final data = doc.data();
         return Board(
           id: doc.id,
-          name: doc['name'] ?? 'Unnamed',
-          description: doc['description'] ?? '',
-          isDefault: doc['isDefault'] ?? false,
+          name: data['name'] ?? 'Unnamed',
+          description: data['description'] ?? '',
+          isDefault: (data['isDefault'] ?? false) as bool,
         );
       }).toList();
 
-      _defaultBoardId = _boards.firstWhere(
-            (b) => b.isDefault,
-        orElse: () => _boards.first,
-      ).id;
+      // Chọn board mặc định
+      final defaultBoard = _boards.where((b) => b.isDefault).toList();
+      if (defaultBoard.isNotEmpty) {
+        _defaultBoardId = defaultBoard.first.id;
+      } else {
+        _defaultBoardId = _boards.first.id; // fallback
+      }
     }
 
     notifyListeners();
   }
 
+  /// Trả về boardId mặc định
   String? getDefaultBoardId() {
     return _defaultBoardId ?? (_boards.isNotEmpty ? _boards.first.id : null);
   }
 
+  /// Fetch từ service (có thể là stream hoặc API riêng)
   Future<void> fetchBoards() async {
     _isLoading = true;
     notifyListeners();
     try {
       _boards = await _boardService.getBoards();
+
+      // Xác định _defaultBoardId từ danh sách boards lấy được
+      final defaultBoard = _boards.where((b) => b.isDefault).toList();
+      if (defaultBoard.isNotEmpty) {
+        _defaultBoardId = defaultBoard.first.id;
+      } else if (_boards.isNotEmpty) {
+        _defaultBoardId = _boards.first.id;
+      } else {
+        _defaultBoardId = null;
+      }
     } catch (e) {
       debugPrint('Error fetching boards: $e');
     }

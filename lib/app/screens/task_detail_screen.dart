@@ -34,8 +34,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     final task = widget.existingTask;
 
     _titleController = TextEditingController(text: task?.title ?? '');
-    _descriptionController =
-        TextEditingController(text: task?.description ?? '');
+    _descriptionController = TextEditingController(text: task?.description ?? '');
     _dueDate = task?.dueDate;
     _dueTime = task?.dueDate != null
         ? TimeOfDay.fromDateTime(task!.dueDate!)
@@ -49,21 +48,14 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.existingTask != null;
-    final taskProvider = Provider.of<TaskProvider>(context);
     final boardProvider = Provider.of<BoardProvider>(context);
     final boards = boardProvider.boards;
+    final defaultBoardId = boardProvider.getDefaultBoardId() ?? '';
 
-    // Nếu chưa có board chọn
-    String dropdownValue;
-    if (_boardId.isNotEmpty) {
-      dropdownValue = _boardId;
-    } else {
-      if (boards.isNotEmpty) {
-        dropdownValue = boards.first.id;
-      } else {
-        dropdownValue = 'default';
-      }
-    }
+    // Nếu _boardId không hợp lệ, fallback về defaultBoardId
+    String dropdownValue = (boards.any((b) => b.id == _boardId) && _boardId.isNotEmpty)
+        ? _boardId
+        : defaultBoardId;
 
     return Scaffold(
       appBar: AppBar(
@@ -133,21 +125,14 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
               // Dropdown chọn Board
               DropdownButtonFormField<String>(
-                value: dropdownValue,
+                value: dropdownValue.isNotEmpty ? dropdownValue : null,
                 decoration: const InputDecoration(labelText: 'Chọn Board'),
-                items: (boards.isNotEmpty
-                    ? boards
-                    .map((b) => DropdownMenuItem(
-                  value: b.id,
-                  child: Text(b.name),
-                ))
-                    .toList()
-                    : [
-                  const DropdownMenuItem(
-                    value: 'default',
-                    child: Text('Mặc định'),
-                  )
-                ]),
+                items: boards.map((b) {
+                  return DropdownMenuItem(
+                    value: b.id,
+                    child: Text(b.name),
+                  );
+                }).toList(),
                 onChanged: (value) {
                   setState(() {
                     _boardId = value ?? '';
@@ -214,8 +199,12 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       );
     }
 
+    final boardProvider = Provider.of<BoardProvider>(context, listen: false);
+    final defaultBoardId = boardProvider.getDefaultBoardId() ?? '';
+    final selectedBoardId =
+    _boardId.isNotEmpty ? _boardId : defaultBoardId;
+
     final taskProvider = Provider.of<TaskProvider>(context, listen: false);
-    final selectedBoardId = _boardId.isNotEmpty ? _boardId : 'default';
 
     if (widget.existingTask == null) {
       final newTask = Task(

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'dart:async';
 import 'package:provider/provider.dart';
+
 import '../../domain/entities/task.dart';
 import '../../domain/repositories/task_repository.dart';
 import '../../domain/usecases/create_task_return_id_usecase.dart';
@@ -10,6 +13,7 @@ import '../../domain/usecases/toggle_task_completion_usecase.dart';
 import '../../domain/usecases/update_task_use_case.dart';
 import '../../domain/usecases/get_all_tasks_use_case.dart';
 import 'board_provider.dart';
+import '../../core/services/notification_service.dart';
 
 class TaskProvider with ChangeNotifier {
   final CreateTaskUseCase _createTaskUseCase;
@@ -20,15 +24,12 @@ class TaskProvider with ChangeNotifier {
   final ToggleTaskCompletionUseCase _toggleTaskCompletionUseCase;
   final CreateTaskReturnIdUseCase _createTaskReturnIdUseCase;
   final TaskRepository _taskRepository;
+  final NotificationService _notificationService = NotificationService();
 
-
-  // Danh sách toàn bộ task
   List<Task> _tasks = [];
-  // Danh sách sau khi lọc (để hiển thị)
   List<Task> _filteredTasks = [];
 
   String? _defaultBoardId;
-
   void setDefaultBoardId(String id) {
     _defaultBoardId = id;
   }
@@ -47,12 +48,9 @@ class TaskProvider with ChangeNotifier {
   List<Task> get tasks => _tasks;
   List<Task> get filteredTasks => _filteredTasks;
 
-  /// Hàm tính thời gian còn lại trước khi hết hạn
   Duration? timeRemaining(Task task) {
     final now = DateTime.now();
-    if (task.dueDate.isBefore(now)) {
-      return Duration.zero;
-    }
+    if (task.dueDate.isBefore(now)) return Duration.zero;
     return task.dueDate.difference(now);
   }
 
@@ -67,7 +65,8 @@ class TaskProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<List<DateTime>> getCompletionHistory(String taskId, String recurrence) async {
+  Future<List<DateTime>> getCompletionHistory(
+      String taskId, String recurrence) async {
     final now = DateTime.now();
     late DateTime from;
     if (recurrence == 'daily') {
@@ -80,7 +79,8 @@ class TaskProvider with ChangeNotifier {
     return _getTaskCompletionsUseCase(taskId, from, now);
   }
 
-  Future<void> toggleCompletion(String taskId, DateTime date, bool isCompleted) async {
+  Future<void> toggleCompletion(
+      String taskId, DateTime date, bool isCompleted) async {
     await _toggleTaskCompletionUseCase(taskId, date, isCompleted);
     notifyListeners();
   }
@@ -90,29 +90,43 @@ class TaskProvider with ChangeNotifier {
     final boardId = task.boardId.isNotEmpty
         ? task.boardId
         : (boardProvider.getDefaultBoardId() ?? '');
-
     final newTask = task.copyWith(boardId: boardId);
 
     await _taskRepository.addTask(newTask);
+
+    // Gọi notification countdown
+    await scheduleTaskNotifications(newTask);
+
     notifyListeners();
   }
 
   Future<void> updateTask(Task task) async {
+    // Tìm task cũ để so sánh dueDate
+    final oldTaskIndex = _tasks.indexWhere((t) => t.id == task.id);
+    DateTime? oldDueDate =
+    oldTaskIndex != -1 ? _tasks[oldTaskIndex].dueDate : null;
+
     await _updateTaskUseCase(task);
-    final index = _tasks.indexWhere((t) => t.id == task.id);
-    if (index != -1) {
-      _tasks[index] = task;
+
+    // Kiểm tra nếu dueDate bị thay đổi hoặc gần tới hạn thì reschedule notification
+    if (oldDueDate == null || oldDueDate != task.dueDate) {
+      await scheduleTaskNotifications(task);
+    }
+
+    if (oldTaskIndex != -1) {
+      _tasks[oldTaskIndex] = task;
       notifyListeners();
     }
   }
 
+
   Future<void> deleteTask(Task task) async {
     await _deleteTaskUseCase(task);
+    await cancelTaskNotifications(task);
     _tasks.removeWhere((t) => t.id == task.id);
     notifyListeners();
   }
 
-  // Lấy tất cả tasks từ usecase
   Future<void> fetchAllTasks() async {
     final all = await _getAllTasksUseCase();
     _tasks = all;
@@ -120,7 +134,6 @@ class TaskProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Lọc tasks theo từ khóa (search)
   List<Task> filterTasks(String keyword) {
     _filteredTasks = _tasks
         .where((task) =>
@@ -131,31 +144,28 @@ class TaskProvider with ChangeNotifier {
     return _filteredTasks;
   }
 
-  // Xóa task theo ID
   Future<void> deleteTaskById(String id) async {
-    // Tìm task để xóa
     final task = _tasks.firstWhere((t) => t.id == id);
-
-    // Xóa khỏi Firestore
     await _deleteTaskUseCase(task);
-
-    // Xóa khỏi danh sách trong Provider
+    await cancelTaskNotifications(task);
     _tasks.removeWhere((t) => t.id == id);
     _filteredTasks.removeWhere((t) => t.id == id);
-
     notifyListeners();
   }
 
-
   Future<String> createTaskAndGetId({
+    required BuildContext context,
     required String title,
     required String description,
     required DateTime dueDate,
     required String recurrence,
   }) async {
+    final boardProvider = Provider.of<BoardProvider>(context, listen: false);
+    final defaultId = boardProvider.getDefaultBoardId() ?? '';
+
     final task = Task(
-      id: '', // để Firestore tự sinh id
-      boardId: _defaultBoardId ?? '',
+      id: '',
+      boardId: defaultId,
       title: title,
       description: description,
       dueDate: dueDate,
@@ -166,10 +176,12 @@ class TaskProvider with ChangeNotifier {
       reminderTime: null,
     );
 
-    return await _createTaskReturnIdUseCase(task);
+    final id = await _createTaskReturnIdUseCase(task);
+    // tạo xong vẫn cần schedule
+    await scheduleTaskNotifications(task.copyWith(id: id));
+    return id;
   }
 
-  /// Khởi tạo dữ liệu completion cho Habit (mặc định 30 ngày)
   Future<void> initHabitCompletions(String taskId, DateTime startDate) async {
     final now = DateTime.now();
     final endDate = now.add(const Duration(days: 30));
@@ -180,13 +192,84 @@ class TaskProvider with ChangeNotifier {
     }
   }
 
-  /// Đặt checkpointDate cho habit
   Future<void> setCheckpointDate(String taskId, DateTime date) async {
     final task = _tasks.firstWhere((t) => t.id == taskId);
     await _updateTaskUseCase(task.copyWith(
-      // thêm trường mới trong TaskModel nếu có hoặc lưu vào Firestore dạng milliseconds
-      description: "${task.description}|checkpoint:${date.millisecondsSinceEpoch}",
+      description:
+      "${task.description}|checkpoint:${date.millisecondsSinceEpoch}",
     ));
   }
 
+  Future<void> scheduleTaskNotifications(Task task) async {
+    await _notificationService.cancelNotification(task.id.hashCode);
+
+    final dueDateTime = task.dueDate;
+
+    // Thông báo nhắc trước (reminder)
+    if (task.reminderTime != null) {
+      final reminderDateTime = dueDateTime.subtract(task.reminderTime!);
+      if (reminderDateTime.isAfter(DateTime.now())) {
+        await _notificationService.scheduleNotification(
+          id: task.id.hashCode,
+          title: 'Nhắc nhở: ${task.title}',
+          body:
+          'Sắp đến hạn vào lúc ${DateFormat('HH:mm dd/MM').format(dueDateTime)}',
+          scheduledTime: reminderDateTime,
+        );
+      }
+    }
+
+    // Nếu còn <= 10 phút thì show ngay 1 notification
+    final remaining = dueDateTime.difference(DateTime.now());
+    if (remaining.inMinutes < 10 && !remaining.isNegative) {
+      final minutesLeft = remaining.inMinutes;
+      await _notificationService.showNotification(
+        id: task.id.hashCode,
+        title: 'Sắp hết hạn: ${task.title}',
+        body: 'Còn $minutesLeft phút nữa đến hạn',
+      );
+    }
+
+    // Đặt countdown 10 phút cuối
+    final tenMinBefore = dueDateTime.subtract(const Duration(minutes: 10));
+    if (tenMinBefore.isAfter(DateTime.now())) {
+      _startCountdownNotifications(task);
+    } else if (remaining.inMinutes > 0) {
+      // Nếu đã trong khoảng 10 phút thì cũng bắt đầu countdown ngay
+      _startCountdownNotifications(task);
+    }
+  }
+
+
+  Future<void> cancelTaskNotifications(Task task) async {
+    await _notificationService.cancelNotification(task.id.hashCode);
+  }
+
+  void _startCountdownNotifications(Task task) {
+    final dueDateTime = task.dueDate;
+
+    Timer.periodic(const Duration(minutes: 1), (timer) async {
+      final remaining = dueDateTime.difference(DateTime.now());
+
+      if (remaining.isNegative) {
+        await _notificationService.showNotification(
+          id: task.id.hashCode,
+          title: 'Hết hạn: ${task.title}',
+          body: 'Nhiệm vụ đã đến hạn!',
+        );
+        timer.cancel();
+      } else if (remaining.inMinutes <= 10) {
+        // 10 phút cuối
+        await _notificationService.showNotification(
+          id: task.id.hashCode,
+          title: 'Sắp hết hạn: ${task.title}',
+          body: 'Còn ${remaining.inMinutes} phút nữa đến hạn',
+        );
+
+        if (remaining.inMinutes == 0) {
+          timer.cancel();
+        }
+      }
+    });
+  }
 }

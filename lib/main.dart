@@ -16,6 +16,7 @@ import 'core/services/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
 
   // Khởi tạo Firebase
   await Firebase.initializeApp(
